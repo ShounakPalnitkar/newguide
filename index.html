@@ -167,7 +167,7 @@
             const stage = document.getElementById('stage').value;
 
             const errors = [];
-            if (isNaN(age) errors.push("Invalid age");
+            if (isNaN(age)) errors.push("Invalid age");
             if (isNaN(weight)) errors.push("Invalid weight");
             if (isNaN(height)) errors.push("Invalid height");
             if (!stage) errors.push("No stage selected");
@@ -290,11 +290,17 @@
                     scales: { 
                         y: { 
                             beginAtZero: true,
-                            title: { text: 'Amount', display: true }
+                            title: { 
+                                display: true,
+                                text: 'Amount'
+                            }
                         }
                     },
                     plugins: {
-                        title: { display: true, text: 'Nutrition Targets' },
+                        title: { 
+                            display: true, 
+                            text: 'Nutrition Targets' 
+                        },
                         tooltip: {
                             callbacks: {
                                 label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}${ctx.label.includes('Protein') ? 'g' : 'mg'}`
