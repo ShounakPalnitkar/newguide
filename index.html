@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinical CKD Nutrition Planner</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --primary-blue: #1976D2;
+            --food-green: #4CAF50;
+            --positive-orange: #FFA726;
+            --background: #E3F2FD;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 2rem;
+            background: var(--background);
+        }
+
+        .brochure-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 2rem;
+        }
+
+        .input-group {
+            margin: 1.5rem 0;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--primary-blue);
+            font-weight: bold;
+        }
+
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid var(--primary-blue);
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+
+        .chart-container {
+            margin: 2rem auto;
+            max-width: 800px;
+            height: 400px;
+        }
+
+        .plan-results {
+            border: 2px solid var(--food-green);
+            padding: 2rem;
+            margin: 2rem 0;
+            border-radius: 10px;
+            background: #F8F9FA;
+        }
+
+        button {
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            background: var(--primary-blue);
+            color: white;
+            font-weight: bold;
+            transition: transform 0.3s ease;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        .guidelines {
+            border-left: 4px solid var(--positive-orange);
+            padding: 1rem;
+            margin: 1rem 0;
+            background: #FFF3E0;
+        }
+
+        .recommendation-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .clinical-guidelines {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: #FFEBEE;
+            border-radius: 8px;
+        }
+
+        .warning {
+            color: #d32f2f;
+            border: 2px solid #ffcdd2;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="brochure-container">
+        <div id="planner">
+            <h1 style="color: var(--primary-blue); text-align: center;">
+                Clinical CKD Nutrition Planner
+            </h1>
+
+            <div class="input-group">
+                <label>Age (18-100 years)</label>
+                <input type="number" id="age" min="18" max="100" placeholder="Enter your age">
+            </div>
+
+            <div class="input-group">
+                <label>Weight (30-300 kg)</label>
+                <input type="number" id="weight" min="30" max="300" placeholder="Enter weight in kg">
+            </div>
+
+            <div class="input-group">
+                <label>Height (100-250 cm)</label>
+                <input type="number" id="height" min="100" max="250" placeholder="Enter height in cm">
+            </div>
+
+            <div class="input-group">
+                <label>CKD Stage</label>
+                <select id="stage">
+                    <option value="">Select CKD Stage</option>
+                    <option value="1">Stage 1</option>
+                    <option value="2">Stage 2</option>
+                    <option value="3">Stage 3</option>
+                    <option value="4">Stage 4</option>
+                    <option value="5">Stage 5</option>
+                </select>
+            </div>
+
+            <div style="text-align: center; margin: 2rem 0;">
+                <button onclick="generatePlan()">Generate Custom Plan</button>
+            </div>
+
+            <div id="planOutput" class="plan-results" style="display: none;">
+                <h2 style="color: var(--food-green);">Clinical Nutrition Plan</h2>
+                <div class="chart-container">
+                    <canvas id="nutritionChart"></canvas>
+                </div>
+                <div id="planDetails"></div>
+                <button onclick="generatePDF()" style="background: var(--food-green); margin-top: 1rem;">
+                    Download Full Plan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let nutritionChart;
+        let currentPlan = null;
+
+        function validateInputs() {
+            const age = parseInt(document.getElementById('age').value);
+            const weight = parseFloat(document.getElementById('weight').value);
+            const height = parseFloat(document.getElementById('height').value);
+            const stage = document.getElementById('stage').value;
+
+            const errors = [];
+            if (isNaN(age) errors.push("Invalid age");
+            if (isNaN(weight)) errors.push("Invalid weight");
+            if (isNaN(height)) errors.push("Invalid height");
+            if (!stage) errors.push("No stage selected");
+
+            if (errors.length > 0) {
+                alert("Please fix these errors:\n" + errors.join("\n"));
+                return false;
+            }
+            return true;
+        }
+
+        class CKDClinicalEngine {
+            constructor() {
+                this.proteinFactors = {1: 0.8, 2: 0.7, 3: 0.6, 4: 0.55, 5: 0.55};
+                this.micronutrientLimits = {
+                    1: {na: 2300, k: 4700, p: 1000},
+                    2: {na: 2000, k: 3000, p: 800},
+                    3: {na: 1500, k: 2000, p: 700},
+                    4: {na: 1500, k: 2000, p: 600},
+                    5: {na: 1500, k: 2000, p: 600}
+                };
+                this.foodDB = {
+                    protein: {
+                        lowP: ['Egg white (1 large)', 'Tofu (100g)', 'Chicken breast (100g)'],
+                        modP: ['Salmon (100g)', 'Turkey (100g)', 'Cottage cheese (50g)'],
+                        highP: ['Red meat (100g)', 'Sardines (100g)', 'Processed meats']
+                    },
+                    vegetables: {
+                        lowK: ['Cabbage', 'Cauliflower', 'Green beans'],
+                        modK: ['Carrots', 'Celery', 'Zucchini'],
+                        highK: ['Spinach', 'Potatoes', 'Tomatoes']
+                    },
+                    fruits: {
+                        lowK: ['Apples', 'Berries', 'Pineapple'],
+                        modK: ['Peaches', 'Grapes', 'Pears'],
+                        highK: ['Bananas', 'Oranges', 'Dried fruits']
+                    }
+                };
+            }
+
+            calculatePlan(age, weight, height, stage) {
+                const numericStage = parseInt(stage);
+                if (isNaN(numericStage)) throw new Error("Invalid CKD stage");
+                
+                // Protein calculation
+                const protein = (this.proteinFactors[numericStage] * weight).toFixed(1);
+
+                // Fluid calculation
+                let fluids = null;
+                if (numericStage >= 4) {
+                    const dryWeight = Math.min(weight, 100);
+                    fluids = Math.min((dryWeight * 15) + 500, numericStage === 4 ? 2000 : 1500);
+                }
+
+                // BMI calculation
+                const heightMeters = height / 100;
+                const bmi = (weight / (heightMeters ** 2)).toFixed(1);
+
+                return {
+                    protein: parseFloat(protein),
+                    micronutrients: this.micronutrientLimits[numericStage],
+                    fluids,
+                    bmi,
+                    foods: this.getFoodRecommendations(numericStage)
+                };
+            }
+
+            getFoodRecommendations(stage) {
+                return {
+                    protein: stage >= 3 ? this.foodDB.protein.lowP : 
+                        [...this.foodDB.protein.lowP, ...this.foodDB.protein.modP],
+                    vegetables: stage >= 3 ? this.foodDB.vegetables.lowK : 
+                        [...this.foodDB.vegetables.lowK, ...this.foodDB.vegetables.modK],
+                    fruits: stage >= 3 ? this.foodDB.fruits.lowK : 
+                        [...this.foodDB.fruits.lowK, ...this.foodDB.fruits.modK]
+                };
+            }
+        }
+
+        function generatePlan() {
+            if (!validateInputs()) return;
+            
+            try {
+                const age = parseInt(document.getElementById('age').value);
+                const weight = parseFloat(document.getElementById('weight').value);
+                const height = parseFloat(document.getElementById('height').value);
+                const stage = document.getElementById('stage').value;
+
+                const engine = new CKDClinicalEngine();
+                currentPlan = engine.calculatePlan(age, weight, height, stage);
+
+                updateChart(currentPlan);
+                displayPlan(currentPlan, stage, age, weight, height);
+            } catch (error) {
+                alert("Error generating plan: " + error.message);
+            }
+        }
+
+        function updateChart(plan) {
+            if (nutritionChart) nutritionChart.destroy();
+            
+            const ctx = document.getElementById('nutritionChart').getContext('2d');
+            nutritionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Protein (g)', 'Sodium (mg)', 'Potassium (mg)', 'Phosphorus (mg)'],
+                    datasets: [{
+                        label: 'Daily Limits',
+                        data: [
+                            plan.protein,
+                            plan.micronutrients.na,
+                            plan.micronutrients.k,
+                            plan.micronutrients.p
+                        ],
+                        backgroundColor: ['#4CAF50','#2196F3','#FF9800','#9C27B0']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { 
+                        y: { 
+                            beginAtZero: true,
+                            title: { text: 'Amount', display: true }
+                        }
+                    },
+                    plugins: {
+                        title: { display: true, text: 'Nutrition Targets' },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}${ctx.label.includes('Protein') ? 'g' : 'mg'}`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function displayPlan(plan, stage, age, weight, height) {
+            let fluidWarning = '';
+            if (plan.fluids) {
+                fluidWarning = `<div class="warning">
+                    Fluid Restriction: ${plan.fluids} mL/day<br>
+                    <small>(Calculated using dry weight)</small>
+                </div>`;
+            }
+
+            document.getElementById('planDetails').innerHTML = `
+                <h3>Clinical Nutrition Plan</h3>
+                <p>Stage ${stage} CKD • Age: ${age} • Weight: ${weight}kg • BMI: ${plan.bmi}</p>
+                ${fluidWarning}
+                <div class="recommendation-grid">
+                    <div class="guidelines">
+                        <h4>Protein (${plan.protein}g/day)</h4>
+                        <ul>${plan.foods.protein.map(f => `<li>${f}</li>`).join('')}</ul>
+                    </div>
+                    <div class="guidelines">
+                        <h4>Vegetables</h4>
+                        <ul>${plan.foods.vegetables.map(f => `<li>${f}</li>`).join('')}</ul>
+                    </div>
+                    <div class="guidelines">
+                        <h4>Fruits</h4>
+                        <ul>${plan.foods.fruits.map(f => `<li>${f}</li>`).join('')}</ul>
+                    </div>
+                </div>
+                <div class="clinical-guidelines">
+                    <strong>Micronutrient Limits:</strong><br>
+                    Sodium: ${plan.micronutrients.na}mg • 
+                    Potassium: ${plan.micronutrients.k}mg • 
+                    Phosphorus: ${plan.micronutrients.p}mg
+                </div>
+            `;
+            document.getElementById('planOutput').style.display = 'block';
+        }
+
+        async function generatePDF() {
+            if (!currentPlan) return;
+            
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                doc.setFontSize(18);
+                doc.text("CKD Clinical Nutrition Plan", 15, 20);
+                
+                const canvas = document.getElementById('nutritionChart');
+                const imgData = canvas.toDataURL('image/png');
+                doc.addImage(imgData, 'PNG', 15, 30, 180, 100);
+                
+                doc.setFontSize(12);
+                const planText = document.getElementById('planDetails').innerText;
+                doc.text(planText, 15, 150, { maxWidth: 180 });
+                
+                doc.save('CKD_Clinical_Plan.pdf');
+            } catch (error) {
+                alert("PDF generation failed: " + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
